@@ -1,1 +1,13 @@
-
+{
+  "name": "pro-pdf-compressor",
+  "version": "1.0.0",
+  "description": "Serverless PDF Compressor",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "archiver": "^6.0.1",
+    "formidable": "^3.5.1",
+    "pdf-lib": "^1.17.1"
+  }
+}
