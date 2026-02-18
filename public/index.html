@@ -1,1 +1,104 @@
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const compressBtn = document.getElementById('compressBtn');
+let filesArray = [];
 
+// Event Drag & Drop
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); fileInput.value = ''; });
+
+function handleFiles(files) {
+    for (let file of files) {
+        if (file.type === 'application/pdf') {
+            const isDuplicate = filesArray.some(f => f.name === file.name && f.size === file.size);
+            if (!isDuplicate) filesArray.push(file);
+        } else {
+            alert(`Gagal: File "${file.name}" bukan berformat PDF!`);
+        }
+    }
+    updateUI();
+}
+
+function removeFile(index) { filesArray.splice(index, 1); updateUI(); }
+function formatBytes(bytes, decimals = 2) {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024, dm = decimals < 0 ? 0 : decimals, sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+function updateUI() {
+    fileList.innerHTML = '';
+    filesArray.forEach((file, index) => {
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        item.innerHTML = `
+            <div class="file-info">
+                <span class="file-name">${file.name}</span>
+                <span class="file-size">${formatBytes(file.size)}</span>
+            </div>
+            <button class="remove-btn" onclick="removeFile(${index})">Hapus</button>
+        `;
+        fileList.appendChild(item);
+    });
+    compressBtn.disabled = filesArray.length === 0;
+}
+
+// Eksekusi API Vercel
+compressBtn.addEventListener('click', async () => {
+    const level = document.querySelector('input[name="level"]:checked').value;
+    const maxMb = document.getElementById('maxMb').value;
+    
+    compressBtn.innerText = 'Mengunggah & Memproses...';
+    compressBtn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('level', level);
+    if (maxMb) formData.append('maxMb', maxMb);
+    filesArray.forEach(file => formData.append('file', file));
+
+    try {
+        const response = await fetch('/api/compress', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Gagal memproses PDF');
+        }
+
+        // Ekstraksi file zip/pdf dari response blob
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Cek header untuk menentukan nama file donwload
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'compressed.pdf';
+        if (contentDisposition && contentDisposition.includes('attachment')) {
+            const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+            if (filenameMatch.length === 2) filename = filenameMatch[1];
+        }
+
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+        
+        alert('Kompresi berhasil dan file mulai diunduh!');
+
+    } catch (error) {
+        console.error(error);
+        alert('Terjadi kesalahan: ' + error.message);
+    } finally {
+        compressBtn.innerText = 'Kompres PDF Sekarang';
+        compressBtn.disabled = false;
+    }
+});
